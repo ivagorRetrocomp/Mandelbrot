@@ -1,3 +1,3 @@
 # Mandelbrot
 
-Compact and relativly fast Mandelbrot fractal drawing programs for soviet retrocomputer Vector06c.
+Compact and relatively fast Mandelbrot fractal drawing programs for soviet retro computer Vector 06c.
