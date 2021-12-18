@@ -1,11 +1,12 @@
 ;Mandelbrot 32x31 with "scroll" for Vector06c
 ;Ivan Gorodetsky
-;v 1.0 - 15.12.2021 (219 bytes)
+;v 1.0 - 15.12.2021 (219 bytes, 1.4 FPS)
+;v 1.1 - 17.12.2021 (218 bytes, 2.0 FPS)
 ;
 ;Compile with The Telemark Assembler (TASM) 3.2
 
 
-SQRTab	.equ (6*256)
+SQRTab	.equ (14*256)
 MAXITER	.equ 8
 ROWS	.equ 31
 VIEW_R	.equ -40
@@ -16,33 +17,29 @@ VIEW_I	.equ -30
 		di
 		lxi h,0038h
 		mvi m,0C9h
-		mvi h,7Fh
-		xra a
-		mov e,a
-		out 10h
 		sphl
-Cls:
-		mov m,a
-		inx h
-		cmp h
-		jnz Cls
 		ei
 		hlt
 		mvi a,88h
 		out 0
-		mvi a,(SQRTab+256)>>8
-		mov d,a
+		mvi c,(SQRTab+256)>>8
+		mov d,c
 SetPal:
+		mov a,c
 		out 2
+		ani 7
 		out 0Ch
 		rst 7
 		rst 7
 		rst 7
 		out 0Ch
-		dcr a
+		dcr c
 		jp SetPal
 	
-		lxi b,-1
+		out 10h
+		mov e,a
+		mov l,a
+		mov b,c
 MakeSQRTabLoop:
 		push h
 		xra a
@@ -80,9 +77,9 @@ Loopxx:
 		sta z_r
 		lda c_i
 		sta z_i
-		mvi d,MAXITER-1
+		mvi b,MAXITER-1
 Loopiter:
-		push d
+		push b
 z_r		.equ $+1
 		lxi h,SQRTab
 		mov c,m
@@ -112,38 +109,39 @@ z_i		.equ $+1
 c_i		.equ $+1
 		adi 0
 		sta z_i			;z_i=(z_r+z_i)^2-z_i2-z_r2+c_i
-		mov a,c
-		sub e
 c_r		.equ $+1
-		adi 0
+		mvi a,0
+		add c
+		sub e
 		sta z_r			;z_r=z_r2-z_i2+c_r
-		pop d
-		dcr d
+		pop b
+		dcr b
 		jnz Loopiter
 		.db 0FEh		;cpi ...
 breakiter:
-		pop d			;D=iter
+		pop b			;B=iter
 ScrAdr	.equ $+1
 		lxi h,0E000h
-		push h
+		mov d,h
+		mov e,l
 Draw:
-		mov a,d
+		mov a,b
 		rrc
-		mov d,a
-		sbb a
 		mov b,a
-		mvi e,8
-		mov c,l
-Draw2:
-		mov m,b
-		dcr l
-		dcr e
-		jnz Draw2
-		mov l,c
+		sbb a
+		mov m,a\ dcr l
+		mov m,a\ dcr l
+		mov m,a\ dcr l
+		mov m,a\ dcr l
+		mov m,a\ dcr l
+		mov m,a\ dcr l
+		mov m,a\ dcr l
+		mov m,a
+		mov l,e
 		mvi a,-32\ add h\ mov h,a
 		cpi 0A0h
 		jnc Draw
-		pop h
+		xchg
 		lda c_r
 		adi 2
 		inr h
