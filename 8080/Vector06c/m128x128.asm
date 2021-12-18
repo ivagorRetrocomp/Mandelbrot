@@ -1,6 +1,7 @@
 ;Mandelbrot 128x128 with zoom for Vector06c
 ;Ivan Gorodetsky
 ;v 1.0 - 15.12.2021 (320 bytes)
+;v 1.1 - 17.12.2021 (289 bytes and slightly faster)
 ;
 ;Compile with The Telemark Assembler (TASM) 3.2
 
@@ -18,36 +19,29 @@ Mask	.equ 11111b		;for scale=256
 		di
 		lxi h,0038h
 		mvi m,0C9h
-		mvi h,7Fh
-		xra a
-		out 10h
 		sphl
-Cls:
-		mov m,a
-		inx h
-		cmp h
-		jnz Cls
 		ei
 		hlt
 		mvi a,88h
 		out 0
-		mvi a,7
+		mvi c,15
 SetPal:
+		mov a,c
 		out 2
+		ani 7
 		out 0Ch
 		rst 7
 		rst 7
 		rst 7
 		out 0Ch
-		dcr a
+		dcr c
 		jp SetPal
-	
-		xra a
-		xchg
-		lxi b,-1
-		push psw
+		out 10h
+		mov d,a
+		mov e,a
+		mov b,c
 MakeSQRTabLoop:
-		pop psw
+		rar
 SetTabAdr1:
 		lxi h,SQRTab
 		mov m,d
@@ -68,18 +62,28 @@ SetTabAdr2:
 		dad b
 		xchg
 		aci 0
-		push psw
-		ani 40h
-		jz MakeSQRTabLoop
-		pop psw
+		add a
+		jp MakeSQRTabLoop
+		rar
 		mov m,a
 		dcx h
 		mov m,d
 
-MainLoop:
+ZoomIn:
+		rar
+		mov c,a
+		dcr a
+		jnz NoZoom1
+		lxi h,SetZoom
+		dcr m
+NoZoom1:
 SetVIEW_I:	
-		lxi h,VIEW_I
-MainLoop1:
+		lxi h,VIEW_I*2
+		mov a,h\ stc\ rar\ mov h,a
+		mov a,l\ rar\ mov l,a
+		mov a,c
+MainLoop:
+		sta DXY
 		shld SetVIEW_I+1
 Loopyy:
 		shld c_i
@@ -87,40 +91,44 @@ Loopyy:
 Loopxx:
 		shld c_r
 		shld z_r
-		push h
 		lhld c_i
-		shld z_i
-		pop h
-		mvi a,MAXITER-1
+		mvi d,MAXITER-1
 Loopiter:
-		push psw
-		call SQR
-		mov c,m
-		inx h
-		mov b,m			;BC=z_r2
-z_i		.equ $+1
-		lxi h,0
+		shld z_i
+		push d
 		call SQR
 		mov e,m
 		inx h
 		mov d,m			;DE=z_i2
+z_r		.equ $+1
+		lxi h,0
+		call SQR
+		mov c,m
+		inx h
+		mov b,m			;BC=z_r2
 		mov l,e
 		mov h,d
 		dad b			;HL=z_r2+z_i2
 		mvi a,3
 		cmp h
 		jc breakiter
-		push d			;z_i2
+		mov a,c
+		sub e
+		mov e,a
+		mov a,b
+		sbb d
+		mov d,a			;DE=z_r2-z_i2
+		push d			;z_r2-z_i2
 		push h			;z_r2+z_i2
-z_r		.equ $+1
+z_i		.equ $+1
 		lxi d,0
-		lhld z_i
+		lhld z_r
 		dad d			;HL=z_r+z_i
 		call SQR
 		mov a,m
 		inx h
 		mov d,m			;DA=(z_r+z_i)^2
-		pop h
+		pop h			;z_r2+z_i2
 		sub l
 		mov l,a
 		mov a,d
@@ -129,52 +137,45 @@ z_r		.equ $+1
 c_i		.equ $+1
 		lxi d,0
 		dad d
-		shld z_i		;z_i=(z_r+z_i)^2-z_i2-z_r2+c_i
-		pop h			;z_i2
-		mov a,c
-		sub l
-		mov l,a
-		mov a,b
-		sbb h
-		mov h,a			;HL=z_r2-z_i2
+		xthl
+						;HL=z_r2-z_i2
 c_r		.equ $+1
 		lxi d,c_r
 		dad d
 		shld z_r		;z_r=z_r2-z_i2+c_r
-		pop psw
-		dcr a
+		pop h
+		pop d
+		dcr d
 		jnz Loopiter
-		push psw
+		.db 0FEh
 breakiter:
+		pop d
 ScrAdr	.equ $+1
 		lxi h,0E000h
-		pop d
 		mov e,h
+PixMask	.equ $+2
+		lxi b,(11000000b*256)+0A0h
 Pixel:
 		mov a,d
 		rrc
 		mov d,a
-PixMask	.equ $+1
-		mvi a,00111111b
-		mov b,a
-		cma
-		jc $+4
-		xra a
-		mov c,a
-		mov a,m\ ana b\ ora c\ mov m,a
+		mov a,b
+		jc $+6
+		cma\ ana m\ .db 0FEh
+		ora m
+		mov m,a
 		dcr l
 		mov m,a
 		inr l
 		mvi a,-32\ add h\ mov h,a
-		cpi 0A0h
+		cmp c
 		jnc Pixel
 		mov a,b			;PixMask
 		rrc
 		rrc
 		sta PixMask
-		mov a,e
-		cmc
-		aci 0
+		mvi a,0
+		adc e
 		sta ScrAdr+1
 		lhld c_r
 DXY		.equ $+1
@@ -186,38 +187,25 @@ DXY		.equ $+1
 		dcr l
 		dcr l
 		shld ScrAdr
-		lhld DXY
-		xchg
 		lhld c_i
 		dad d
 		jnz Loopyy
 		mov a,e
 SetZoom:
 		jmp ZoomIn
+ZoomOut:
+		add a
+		cpi 32
+		jnz NoZoom32
+		lxi h,SetZoom
+		inr m
+NoZoom32:
+		lhld SetVIEW_I+1
+		dad h
+		jmp MainLoop
 SQR:
 		dad h
 		mvi a,Mask\ ana h\ adi SQRTab>>8\ mov h,a
 		ret
-ZoomIn:
-		rar\ sta DXY
-		dcr a
-		jnz NoZoom1
-		mvi a,ZoomOut&255
-		sta SetZoom+1
-NoZoom1:
-		lhld SetVIEW_I+1
-		mov a,h\ stc\ rar\ mov h,a
-		mov a,l\ rar\ mov l,a
-		jmp MainLoop1
-ZoomOut:
-		add a\ sta DXY
-		cpi 32
-		jnz NoZoom32
-		mvi a,ZoomIn&255
-		sta SetZoom+1
-NoZoom32:
-		lhld SetVIEW_I+1
-		dad h
-		jmp MainLoop1
-
+		
 		.end
